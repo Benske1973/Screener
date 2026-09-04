@@ -4,12 +4,17 @@ import json
 import os
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from local_high.strategy import IDLE, SymbolState
 
 
 class StateStore:
     """Per-symbol state machine snapshots persisted as a single JSON file.
+
+    Also holds a small ``meta`` dict for scanner-wide bookkeeping that isn't
+    per-symbol (e.g. the heartbeat's last-sent timestamp), so it survives a
+    restart the same way the per-symbol state does.
 
     Writes are atomic (temp file + ``os.replace``) so an interrupted run cannot
     leave a truncated store behind.
@@ -18,9 +23,11 @@ class StateStore:
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
         self._states: dict[str, SymbolState] = {}
+        self._meta: dict[str, Any] = {}
 
     def load(self) -> None:
         self._states = {}
+        self._meta = {}
         if not self.path.is_file():
             return
         try:
@@ -31,12 +38,21 @@ class StateStore:
             if isinstance(payload, dict):
                 payload.setdefault("symbol", symbol)
                 self._states[symbol] = SymbolState.from_dict(payload)
+        meta = raw.get("meta")
+        if isinstance(meta, dict):
+            self._meta = meta
 
     def get(self, symbol: str) -> SymbolState | None:
         return self._states.get(symbol)
 
     def put(self, state: SymbolState) -> None:
         self._states[state.symbol] = state
+
+    def get_meta(self, key: str, default: Any = None) -> Any:
+        return self._meta.get(key, default)
+
+    def set_meta(self, key: str, value: Any) -> None:
+        self._meta[key] = value
 
     def prune(self, keep: set[str]) -> None:
         """Drop IDLE states for symbols no longer in the universe."""
@@ -51,6 +67,7 @@ class StateStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         payload = {
             "version": 1,
+            "meta": self._meta,
             "symbols": {sym: st.to_dict() for sym, st in sorted(self._states.items())},
         }
         fd, tmp = tempfile.mkstemp(dir=self.path.parent, suffix=".tmp")

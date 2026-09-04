@@ -166,3 +166,31 @@ def test_check_pattern_alert_score_gate():
     out: list = []
     scanner._check_pattern_alert("AAA-USDT", _BREAKOUT_CANDLES, state, 1_000_000, out)
     assert out == []
+
+
+async def test_heartbeat_fires_on_a_fresh_state(cfg, tmp_path):
+    scanner = Scanner(replace(cfg, state_path=str(tmp_path / "state.json")))
+    scanner.state.load()
+    scanner._universe = ["AAA-USDT"]
+    await scanner._maybe_heartbeat(now_ms=1_700_000_000_000)
+    assert scanner.state.get_meta("last_heartbeat_ts") == 1_700_000_000
+
+
+async def test_heartbeat_respects_the_interval(cfg, tmp_path):
+    scanner = Scanner(
+        replace(cfg, state_path=str(tmp_path / "state.json"), heartbeat_interval_seconds=3600)
+    )
+    scanner.state.load()
+    scanner._universe = ["AAA-USDT"]
+    await scanner._maybe_heartbeat(now_ms=1_700_000_000_000)
+    await scanner._maybe_heartbeat(now_ms=1_700_000_100_000)  # 100s later, inside the hour
+    assert scanner.state.get_meta("last_heartbeat_ts") == 1_700_000_000  # unchanged
+
+
+async def test_heartbeat_disabled_via_config(cfg, tmp_path):
+    scanner = Scanner(
+        replace(cfg, state_path=str(tmp_path / "state.json"), heartbeat_enabled=False)
+    )
+    scanner.state.load()
+    await scanner._maybe_heartbeat(now_ms=1_700_000_000_000)
+    assert scanner.state.get_meta("last_heartbeat_ts") is None

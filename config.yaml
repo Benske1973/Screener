@@ -111,6 +111,12 @@ pattern_confidence_weights:
   trend: 0.5        # breakout in the direction of the broader trend
   strength: 1.0      # how far price cleared the line, relative to pattern height
 
+# --- Heartbeat (Telegram, local-high-scanner only) ---------------------
+# A periodic "still alive" message so silence never means "did it crash?".
+# Fires on the first cycle after a fresh state.json, then every interval.
+heartbeat_enabled: true
+heartbeat_interval_seconds: 86400   # 24h
+
 # --- Storage -------------------------------------------------------
 state_path: data/state.json
 events_csv: data/events.csv

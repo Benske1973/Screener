@@ -99,6 +99,15 @@ _PATTERN_LABELS = {
 _PATTERN_EMOJI = {"breakout_up": "\U0001f680", "breakout_down": "\U0001f53b"}  # rocket / red tri
 
 
+def format_heartbeat(cycle: int, universe_size: int, active_count: int, timeframe: str) -> str:
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return (
+        f"\U0001f49a Scanner draait — {stamp}\n"
+        f"TF {timeframe} · cycle {cycle} · universe {universe_size} · "
+        f"actieve setups {active_count}"
+    )
+
+
 def format_pattern_alert(match: PatternMatch, score: float, timeframe: str) -> str:
     label = _PATTERN_LABELS.get(match.pattern, match.pattern)
     direction = "Bullish" if match.status == "breakout_up" else "Bearish"

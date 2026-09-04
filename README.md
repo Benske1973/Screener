@@ -158,6 +158,16 @@ bearish setups too. Turn it off entirely with `pattern_alerts_enabled: false`.
 Like every alert in this project: a research signal, not a trade — the
 scanner never opens a position.
 
+### Heartbeat
+
+`local-high-scanner` also sends a periodic "still alive" Telegram message
+(cycle number, universe size, active setups) so silence never means "did it
+crash?" — no news should mean "quiet market", not "dead process". Fires on
+the first cycle after a fresh `data/state.json`, then every
+`heartbeat_interval_seconds` (default 24h); the last-sent timestamp is
+persisted, so it survives a restart instead of re-firing immediately. Turn
+it off with `heartbeat_enabled: false`.
+
 ## Web dashboard
 
 `local-high-web` serves the New Local High board, every preset screener, and

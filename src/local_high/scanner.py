@@ -10,6 +10,7 @@ from local_high.indicators import Candle, closed_only, parse_kucoin_candles
 from local_high.kucoin import KuCoinApiError, KuCoinRestClient, Ticker
 from local_high.notifier import (
     TelegramNotifier,
+    format_heartbeat,
     format_message,
     format_pattern_alert,
     render_table,
@@ -71,6 +72,7 @@ class Scanner:
 
         await self._emit(evaluations, now_ms)
         await self._emit_patterns()
+        await self._maybe_heartbeat(now_ms)
         self.state.prune(set(self._universe))
         self.state.save()
         print(render_table(self._cycle, len(self._universe), evaluations, now_ms), flush=True)
@@ -179,6 +181,33 @@ class Scanner:
                 continue
             await self.telegram.send(message)
             await asyncio.sleep(0.4)  # stay well under Telegram's per-chat rate limit
+
+    async def _maybe_heartbeat(self, now_ms: int) -> None:
+        """Send a periodic 'still alive' ping so silence never means 'did it crash?'.
+
+        Fires on the first cycle after a fresh state.json (nothing to compare
+        against yet), then every ``heartbeat_interval_seconds`` after that -
+        the timestamp is persisted in state.json so it survives a restart.
+        """
+        if not self.cfg.heartbeat_enabled:
+            return
+        now_s = now_ms // 1000
+        last = self.state.get_meta("last_heartbeat_ts", 0)
+        if now_s - last < self.cfg.heartbeat_interval_seconds:
+            return
+        self.state.set_meta("last_heartbeat_ts", now_s)
+        active = self.state.active_count()
+        message = format_heartbeat(self._cycle, len(self._universe), active, self.cfg.timeframe)
+        print(f"\n*** HEARTBEAT ***\n{message}\n", flush=True)
+        LOGGER.info(
+            "heartbeat sent (cycle=%d universe=%d active=%d)",
+            self._cycle,
+            len(self._universe),
+            active,
+        )
+        if self.dry_run or self.telegram is None:
+            return
+        await self.telegram.send(message)
 
     # ------------------------------------------------------------------ #
     async def _emit(self, evaluations: list[Evaluation], now_ms: int) -> None:

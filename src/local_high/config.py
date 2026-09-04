@@ -147,6 +147,10 @@ class Config:
     pattern_alert_cooldown_seconds: int = 21_600
     pattern_confidence_weights: PatternScoreWeights = field(default_factory=PatternScoreWeights)
 
+    # heartbeat (Telegram, local-high-scanner only)
+    heartbeat_enabled: bool = True
+    heartbeat_interval_seconds: int = 86_400
+
     # storage
     state_path: str = "data/state.json"
     events_csv: str = "data/events.csv"
@@ -249,6 +253,8 @@ class Config:
             raise ConfigError("pattern_alert_cooldown_seconds must be >= 0")
         if self.pattern_confidence_weights.total() <= 0:
             raise ConfigError("pattern_confidence_weights must sum to a positive number")
+        if self.heartbeat_interval_seconds < 60:
+            raise ConfigError("heartbeat_interval_seconds must be >= 60")
 
 
 def _coerce(raw: dict[str, Any]) -> Config:

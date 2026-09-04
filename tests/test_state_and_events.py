@@ -36,6 +36,19 @@ def test_state_store_prune_keeps_active(tmp_path):
     assert store.get("GONE-USDT") is not None   # active -> kept even if delisted
 
 
+def test_state_store_meta_round_trip(tmp_path):
+    path = tmp_path / "state.json"
+    store = StateStore(path)
+    store.load()
+    assert store.get_meta("last_heartbeat_ts", 0) == 0  # default when unset
+    store.set_meta("last_heartbeat_ts", 1_700_000_000)
+    store.save()
+
+    reopened = StateStore(path)
+    reopened.load()
+    assert reopened.get_meta("last_heartbeat_ts", 0) == 1_700_000_000
+
+
 def test_state_store_survives_corrupt_file(tmp_path):
     path = tmp_path / "state.json"
     path.write_text("{ not json", encoding="utf-8")
