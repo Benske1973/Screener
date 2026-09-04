@@ -313,82 +313,273 @@ _INDEX_HTML = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>local-high-scanner</title>
 <style>
-  :root { color-scheme: dark; }
+  :root {
+    color-scheme: dark;
+    --bg: #0a0d13; --bg-side: #0c0f16; --bg-card: #11161f; --bg-card-2: #161d29;
+    --border: #212a38; --text: #dde3ea; --text-dim: #8a93a3; --text-faint: #57606f;
+    --accent: #2dd4a7; --accent-dim: rgba(45,212,167,0.12);
+    --up: #2dd4a7; --down: #ff6b6b; --warn: #f5b942; --radius: 10px;
+  }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; background: #0b0e14; color: #d7dce3;
-    font: 14px/1.4 "Cascadia Code", "Consolas", monospace;
+    margin: 0; background: var(--bg); color: var(--text); font-size: 13.5px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+      Arial, sans-serif;
   }
-  header {
-    padding: 14px 20px; border-bottom: 1px solid #1f2733;
-    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  a { color: var(--accent); }
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* sidebar */
+  .sidebar {
+    width: 216px; flex: 0 0 216px; background: var(--bg-side);
+    border-right: 1px solid var(--border); display: flex; flex-direction: column;
+    overflow-y: auto;
   }
-  header h1 { font-size: 16px; margin: 0; color: #7ee787; }
-  header .meta { color: #8892a0; font-size: 12px; }
-  .banner { padding: 8px 20px; background: #3a2020; color: #ffb4b4; display: none; }
-  main { padding: 16px 20px; display: flex; flex-direction: column; gap: 22px; }
-  section h2 {
-    font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em;
-    color: #8892a0; margin: 0 0 8px;
+  .brand {
+    display: flex; align-items: center; gap: 9px; padding: 18px 20px 16px;
+    font-weight: 700; font-size: 14.5px; letter-spacing: 0.02em;
   }
-  .screen-picker { margin-bottom: 8px; }
+  .brand-mark { color: var(--accent); font-size: 18px; }
+  .nav-group { padding: 8px 0; border-top: 1px solid var(--border); }
+  .nav-group:first-of-type { border-top: none; padding-top: 0; }
+  .nav-label {
+    padding: 10px 20px 6px; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-faint); font-weight: 700;
+  }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 8px 20px;
+    color: var(--text-dim); text-decoration: none; font-size: 13px; cursor: pointer;
+    border-left: 2px solid transparent;
+  }
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .nav-item.active {
+    color: var(--accent); background: var(--accent-dim);
+    border-left-color: var(--accent); font-weight: 600;
+  }
+  .nav-icon { width: 15px; text-align: center; font-size: 12.5px; }
+  .nav-badge {
+    margin-left: auto; background: var(--bg-card-2); color: var(--text-dim);
+    font-size: 10px; padding: 1px 6px; border-radius: 999px; min-width: 16px;
+    text-align: center;
+  }
+  .nav-item.active .nav-badge { background: var(--accent); color: #04241b; }
+  .sidebar-footer { margin-top: auto; padding: 16px 20px; }
+  .pill {
+    display: inline-block; font-size: 10px; color: var(--text-faint);
+    border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px;
+  }
+
+  /* main column */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .topbar {
+    padding: 14px 24px; border-bottom: 1px solid var(--border); display: flex;
+    align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .topbar h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  .topbar-stats {
+    display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim);
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    display: inline-block;
+  }
+  .banner {
+    padding: 8px 24px; background: #3a1f1f; color: #ffb4b4; font-size: 12.5px;
+    display: none;
+  }
+
+  .chart-drawer {
+    border-bottom: 1px solid var(--border); background: var(--bg-card); padding: 14px 24px;
+  }
+  .chart-drawer[hidden] { display: none; }
+  .chart-head {
+    display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;
+  }
+  .chart-head h2 { font-size: 13px; margin: 0; font-weight: 600; }
+  .chart-head .sub { color: var(--text-dim); font-size: 12px; }
+  #chart-close {
+    margin-left: auto; color: var(--text-dim); text-decoration: none; font-size: 12px;
+  }
+  #chart-canvas {
+    width: 100%; height: 300px; display: block; background: var(--bg-card-2);
+    border: 1px solid var(--border); border-radius: 6px;
+  }
+  .legend {
+    display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--text-dim);
+  }
+  .legend .swatch {
+    display: inline-block; width: 10px; height: 2px; margin-right: 4px;
+    vertical-align: middle;
+  }
+
+  .scroll-area { flex: 1; overflow-y: auto; padding: 20px 24px 40px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px 18px; margin-bottom: 18px;
+  }
+  .card h3 {
+    margin: 0 0 12px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-dim); font-weight: 700; display: flex; align-items: center; gap: 10px;
+  }
+  .card h3 .pill { text-transform: none; letter-spacing: 0; font-weight: 500; margin-left: auto; }
+
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px; margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .stat-value { font-size: 25px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .stat-label { color: var(--text-dim); font-size: 11.5px; margin-top: 3px; }
+  .stat-value.up { color: var(--up); }
+
+  .screen-picker { margin-bottom: 12px; }
   select {
-    background: #131722; color: #d7dce3; border: 1px solid #2a3441;
-    padding: 4px 8px; font: inherit;
+    background: var(--bg-card-2); color: var(--text); border: 1px solid var(--border);
+    padding: 6px 10px; font: inherit; border-radius: 6px;
   }
-  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
-  th, td { text-align: right; padding: 4px 10px; white-space: nowrap; }
+
+  table {
+    border-collapse: collapse; width: 100%; font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+  }
+  th, td { text-align: right; padding: 7px 10px; white-space: nowrap; }
   th:first-child, td:first-child { text-align: left; }
-  th { color: #8892a0; font-weight: 500; border-bottom: 1px solid #1f2733; }
-  tbody tr:nth-child(odd) { background: #10141d; }
+  th {
+    color: var(--text-dim); font-weight: 700; font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: 0.03em; border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
   tr.clickable { cursor: pointer; }
-  tr.clickable:hover { background: #182131 !important; }
-  tr.selected td:first-child { color: #7ee787; font-weight: 600; }
-  td.detail { text-align: left; white-space: normal; color: #b7c0cc; }
-  .up { color: #7ee787; } .down { color: #ff7b72; }
-  .empty { color: #565f6c; font-style: italic; padding: 6px 0; }
-  a { color: #7ee787; }
-  #chart-title { color: #565f6c; font-weight: normal; text-transform: none; letter-spacing: 0; }
-  #chart-close { float: right; color: #8892a0; text-decoration: none; font-size: 12px; }
-  #chart-canvas { width: 100%; height: 340px; display: none; background: #10141d;
-    border: 1px solid #1f2733; border-radius: 3px; }
-  .legend { display: flex; gap: 16px; margin-top: 6px; font-size: 11.5px; color: #8892a0; }
-  .legend span.swatch { display: inline-block; width: 10px; height: 2px; margin-right: 4px;
-    vertical-align: middle; }
+  tr.clickable:hover { background: rgba(255,255,255,0.03); }
+  tr.selected td:first-child { color: var(--accent); font-weight: 700; }
+  td.detail { text-align: left; white-space: normal; color: var(--text-dim); }
+  .up { color: var(--up); } .down { color: var(--down); }
+  .empty { color: var(--text-faint); font-style: italic; padding: 10px 0; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap;
+  }
+  .badge-breakout, .badge-rebreak, .badge-breakout_up {
+    background: rgba(45,212,167,0.15); color: var(--up);
+  }
+  .badge-pullback { background: rgba(245,185,66,0.15); color: var(--warn); }
+  .badge-watch, .badge-emerging, .badge-idle {
+    background: rgba(138,147,163,0.15); color: var(--text-dim);
+  }
+  .badge-fakeout, .badge-breakout_down {
+    background: rgba(255,107,107,0.15); color: var(--down);
+  }
+
+  footer.disclaimer {
+    padding: 12px 24px; color: var(--text-faint); font-size: 11px;
+    border-top: 1px solid var(--border);
+  }
+
+  @media (max-width: 760px) {
+    .sidebar { width: 60px; flex-basis: 60px; }
+    .nav-label, .brand-name, .nav-item .label, .nav-badge { display: none; }
+    .nav-item { justify-content: center; padding: 10px 0; }
+    .brand { justify-content: center; padding: 16px 0; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>local-high-scanner</h1>
-  <span class="meta" id="meta">loading…</span>
-</header>
-<div class="banner" id="banner"></div>
-<main>
-  <section>
-    <h2>Chart <span id="chart-title"></span><a href="#" id="chart-close">close ✕</a></h2>
-    <div id="chart-empty" class="empty">click a symbol below to see its chart</div>
-    <canvas id="chart-canvas" width="1100" height="340"></canvas>
-    <div class="legend" id="chart-legend"></div>
-  </section>
-  <section>
-    <h2>New Local High — active setups</h2>
-    <div id="nlh"></div>
-  </section>
-  <section>
-    <h2>Preset screeners</h2>
-    <div class="screen-picker">
-      <select id="screen-select"></select>
+<div class="app">
+  <nav class="sidebar">
+    <div class="brand">
+      <span class="brand-mark">&#9670;</span><span class="brand-name">LOCAL HIGH</span>
     </div>
-    <div id="screen-table"></div>
-  </section>
-  <section>
-    <h2>Chart patterns</h2>
-    <div id="patterns"></div>
-  </section>
-</main>
-<p style="padding:0 20px 20px;color:#565f6c;font-size:11.5px;">
-  Research-only. Not financial advice — nothing here places an order.
-</p>
+    <div class="nav-group">
+      <a class="nav-item" data-section="overview">
+        <span class="nav-icon">&#9638;</span><span class="label">Overview</span>
+      </a>
+    </div>
+    <div class="nav-group">
+      <div class="nav-label">Crypto Analytics</div>
+      <a class="nav-item" data-section="nlh">
+        <span class="nav-icon">&#8599;</span><span class="label">New Local High</span>
+        <span class="nav-badge" id="nav-badge-nlh">0</span>
+      </a>
+      <a class="nav-item" data-section="screener">
+        <span class="nav-icon">&#9906;</span><span class="label">Screener</span>
+      </a>
+      <a class="nav-item" data-section="patterns">
+        <span class="nav-icon">&#9686;</span><span class="label">Chart Patterns</span>
+        <span class="nav-badge" id="nav-badge-patterns">0</span>
+      </a>
+    </div>
+    <div class="sidebar-footer"><span class="pill">research-only</span></div>
+  </nav>
+  <div class="main">
+    <header class="topbar">
+      <h1 id="page-title">Overview</h1>
+      <div class="topbar-stats"><span class="dot"></span><span id="meta">loading…</span></div>
+    </header>
+    <div class="banner" id="banner"></div>
+    <div class="chart-drawer" id="chart-drawer" hidden>
+      <div class="chart-head">
+        <h2>Chart — <span id="chart-symbol"></span></h2>
+        <span class="sub" id="chart-sub"></span>
+        <a href="#" id="chart-close">close &#10005;</a>
+      </div>
+      <canvas id="chart-canvas" width="1100" height="300"></canvas>
+      <div class="legend" id="chart-legend"></div>
+    </div>
+    <main class="scroll-area">
+      <section id="section-overview" class="panel">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value" id="stat-universe">-</div>
+            <div class="stat-label">Universe scanned</div></div>
+          <div class="stat-card"><div class="stat-value up" id="stat-nlh">-</div>
+            <div class="stat-label">Active NLH setups</div></div>
+          <div class="stat-card"><div class="stat-value" id="stat-patterns">-</div>
+            <div class="stat-label">Patterns forming</div></div>
+          <div class="stat-card"><div class="stat-value up" id="stat-breakouts">-</div>
+            <div class="stat-label">Pattern breakouts</div></div>
+        </div>
+        <div class="card">
+          <h3>Top New Local High setups</h3>
+          <div id="overview-nlh"></div>
+        </div>
+        <div class="card">
+          <h3>Latest pattern breakouts</h3>
+          <div id="overview-patterns"></div>
+        </div>
+      </section>
+      <section id="section-nlh" class="panel">
+        <div class="card">
+          <h3>New Local High — active setups</h3>
+          <div id="nlh"></div>
+        </div>
+      </section>
+      <section id="section-screener" class="panel">
+        <div class="card">
+          <h3>Preset screeners <span class="pill" id="screen-count"></span></h3>
+          <div class="screen-picker"><select id="screen-select"></select></div>
+          <div id="screen-table"></div>
+        </div>
+      </section>
+      <section id="section-patterns" class="panel">
+        <div class="card">
+          <h3>Chart patterns</h3>
+          <div id="patterns"></div>
+        </div>
+      </section>
+    </main>
+    <footer class="disclaimer">
+      Research-only. Not financial advice — nothing here places an order.
+    </footer>
+  </div>
+</div>
 <script>
 const REFRESH_MS = __REFRESH_MS__;
 const SCREENS = __SCREENS_JSON__;
@@ -408,6 +599,10 @@ function fmt(n) {
   return v.toLocaleString('en-US', { maximumFractionDigits: 8 });
 }
 
+function badge(text, cls) {
+  return `<span class="badge badge-${cls}">${text}</span>`;
+}
+
 function table(rows, cols) {
   if (!rows.length) return '<div class="empty">no matches</div>';
   const head = cols.map(c => `<th>${c.label}</th>`).join('');
@@ -423,6 +618,28 @@ function table(rows, cols) {
   return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+// --------------------------------------------------------------------- //
+// Section routing (sidebar nav <-> #hash <-> visible panel)
+// --------------------------------------------------------------------- //
+const SECTION_TITLES = {
+  overview: 'Overview', nlh: 'New Local High', screener: 'Preset Screeners',
+  patterns: 'Chart Patterns',
+};
+function showSection(name) {
+  if (!SECTION_TITLES[name]) name = 'overview';
+  document.querySelectorAll('.panel').forEach(
+    el => el.classList.toggle('active', el.id === 'section-' + name)
+  );
+  document.querySelectorAll('.nav-item').forEach(
+    el => el.classList.toggle('active', el.dataset.section === name)
+  );
+  document.getElementById('page-title').textContent = SECTION_TITLES[name];
+}
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', (e) => { e.preventDefault(); location.hash = el.dataset.section; });
+});
+window.addEventListener('hashchange', () => showSection(location.hash.slice(1)));
+
 // Delegate row clicks once per container - innerHTML gets replaced every
 // tick, so binding per-row would leak listeners.
 function onRowClick(containerId) {
@@ -431,63 +648,74 @@ function onRowClick(containerId) {
     if (tr) openChart(tr.dataset.symbol);
   });
 }
-['nlh', 'screen-table', 'patterns'].forEach(onRowClick);
+['nlh', 'screen-table', 'patterns', 'overview-nlh', 'overview-patterns'].forEach(onRowClick);
 
-function renderNlh(rows) {
-  document.getElementById('nlh').innerHTML = table(rows, [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'state', label: 'State' },
-    { key: 'price', label: 'Price' },
-    { key: 'distance_pct', label: 'Δres%',
-      fmt: r => (r.distance_pct >= 0 ? '+' : '') + r.distance_pct.toFixed(2),
-      cls: r => r.distance_pct >= 0 ? 'up' : 'down' },
-    { key: 'rvol', label: 'RVOL' },
-    { key: 'change_24h_pct', label: '24h%' },
-    { key: 'score', label: 'Score' },
-    { key: 'entry', label: 'Entry' },
-    { key: 'stop', label: 'Stop' },
-    { key: 'tp1', label: 'TP1' },
-    { key: 'rr', label: 'R:R' },
-  ]);
-}
+const NLH_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'state', label: 'State', fmt: r => badge(r.state, r.state.toLowerCase()) },
+  { key: 'price', label: 'Price' },
+  { key: 'distance_pct', label: 'Δres%',
+    fmt: r => (r.distance_pct >= 0 ? '+' : '') + r.distance_pct.toFixed(2),
+    cls: r => r.distance_pct >= 0 ? 'up' : 'down' },
+  { key: 'rvol', label: 'RVOL' },
+  { key: 'change_24h_pct', label: '24h%' },
+  { key: 'score', label: 'Score' },
+  { key: 'entry', label: 'Entry' },
+  { key: 'stop', label: 'Stop' },
+  { key: 'tp1', label: 'TP1' },
+  { key: 'rr', label: 'R:R' },
+];
+const SCREEN_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'price', label: 'Price' },
+  { key: 'detail', label: 'Detail', fmt: r => r.detail, cls: () => 'detail' },
+];
+const PATTERN_COLS = [
+  { key: 'symbol', label: 'Symbol' },
+  { key: 'pattern', label: 'Pattern' },
+  { key: 'status', label: 'Status', fmt: r => badge(r.status.replace('_', ' '), r.status) },
+  { key: 'price', label: 'Price' },
+  { key: 'target', label: 'Target' },
+  { key: 'note', label: 'Note', fmt: r => r.note, cls: () => 'detail' },
+];
 
-function renderScreen(rows) {
-  document.getElementById('screen-table').innerHTML = table(rows, [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'price', label: 'Price' },
-    { key: 'detail', label: 'Detail', fmt: r => r.detail, cls: () => 'detail' },
-  ]);
-}
-
-function renderPatterns(rows) {
-  document.getElementById('patterns').innerHTML = table(rows, [
-    { key: 'symbol', label: 'Symbol' },
-    { key: 'pattern', label: 'Pattern' },
-    { key: 'status', label: 'Status',
-      cls: r => r.status === 'breakout_up' ? 'up' : (r.status === 'breakout_down' ? 'down' : '') },
-    { key: 'price', label: 'Price' },
-    { key: 'target', label: 'Target' },
-    { key: 'note', label: 'Note', fmt: r => r.note, cls: () => 'detail' },
-  ]);
+function renderInto(containerId, rows, cols) {
+  document.getElementById(containerId).innerHTML = table(rows, cols);
 }
 
 let lastData = null;
 let selectedSymbol = null;
 
+function renderOverview() {
+  document.getElementById('stat-universe').textContent = lastData.universe_size;
+  document.getElementById('stat-nlh').textContent = lastData.nlh_active.length;
+  document.getElementById('stat-patterns').textContent = lastData.patterns.length;
+  const breakouts = lastData.patterns.filter(p => p.status !== 'emerging');
+  document.getElementById('stat-breakouts').textContent = breakouts.length;
+  renderInto('overview-nlh', lastData.nlh_active.slice(0, 5), NLH_COLS);
+  renderInto('overview-patterns', breakouts.slice(0, 5), PATTERN_COLS);
+}
+
 function renderAll() {
   if (!lastData) return;
-  renderNlh(lastData.nlh_active);
-  renderScreen(lastData.screens[screenSelect.value] || []);
-  renderPatterns(lastData.patterns);
+  renderInto('nlh', lastData.nlh_active, NLH_COLS);
+  renderInto('screen-table', lastData.screens[screenSelect.value] || [], SCREEN_COLS);
+  renderInto('patterns', lastData.patterns, PATTERN_COLS);
+  renderOverview();
+  document.getElementById('nav-badge-nlh').textContent = lastData.nlh_active.length;
+  document.getElementById('nav-badge-patterns').textContent =
+    lastData.patterns.filter(p => p.status !== 'emerging').length;
+  const total = Object.values(lastData.screens).reduce((n, rows) => n + rows.length, 0);
+  document.getElementById('screen-count').textContent = `${total} matches across all presets`;
 }
 screenSelect.addEventListener('change', renderAll);
 
 // --------------------------------------------------------------------- //
-// Chart panel: a candlestick canvas with the pattern's fitted support/
+// Chart drawer: a candlestick canvas with the pattern's fitted support/
 // resistance lines (or the NLH breakout level/stop/target) drawn on top.
 // --------------------------------------------------------------------- //
-const LINE_COLORS = { resistance: '#ff9f5a', support: '#5ac8ff', target: '#7ee787',
-  level: '#8892a0', stop: '#ff7b72', tp1: '#7ee787' };
+const LINE_COLORS = { resistance: '#ff9f5a', support: '#5ac8ff', target: '#2dd4a7',
+  level: '#8a93a3', stop: '#ff6b6b', tp1: '#2dd4a7' };
 
 function buildOverlay(symbol, n) {
   const lines = [];
@@ -555,7 +783,7 @@ function drawChart(canvas, candles, overlay) {
     const c = candles[i];
     const x = xAt(i);
     const up = c.c >= c.o;
-    ctx.strokeStyle = ctx.fillStyle = up ? '#7ee787' : '#ff7b72';
+    ctx.strokeStyle = ctx.fillStyle = up ? '#2dd4a7' : '#ff6b6b';
     ctx.beginPath();
     ctx.moveTo(x, yAt(c.h)); ctx.lineTo(x, yAt(c.l)); ctx.stroke();
     const yo = yAt(c.o), yc = yAt(c.c);
@@ -563,7 +791,7 @@ function drawChart(canvas, candles, overlay) {
   }
 
   ctx.lineWidth = 1.5;
-  ctx.font = '11px monospace';
+  ctx.font = '11px -apple-system, "Segoe UI", sans-serif';
   ctx.textAlign = 'left';
   for (const line of overlay.lines) {
     ctx.strokeStyle = line.color;
@@ -577,7 +805,7 @@ function drawChart(canvas, candles, overlay) {
     ctx.fillText(fmt(line.y1), padL + plotW + 4, yAt(line.y1) + 3);
   }
 
-  ctx.fillStyle = '#8892a0';
+  ctx.fillStyle = '#8a93a3';
   ctx.fillText(fmt(hi), padL + plotW + 4, padT + 4);
   ctx.fillText(fmt(lo), padL + plotW + 4, padT + plotH);
 }
@@ -592,9 +820,11 @@ function renderLegend(overlay) {
 
 async function refreshChart() {
   if (!selectedSymbol) return;
+  const drawer = document.getElementById('chart-drawer');
   const canvas = document.getElementById('chart-canvas');
-  const emptyEl = document.getElementById('chart-empty');
-  const titleEl = document.getElementById('chart-title');
+  const subEl = document.getElementById('chart-sub');
+  document.getElementById('chart-symbol').textContent = selectedSymbol;
+  drawer.hidden = false;
   try {
     const res = await fetch(
       '/api/candles/' + encodeURIComponent(selectedSymbol), { cache: 'no-store' }
@@ -602,16 +832,13 @@ async function refreshChart() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const overlay = buildOverlay(selectedSymbol, data.candles.length);
-    titleEl.textContent = ` — ${selectedSymbol}${overlay.title ? ' · ' + overlay.title : ''}`;
-    canvas.style.display = 'block';
-    emptyEl.style.display = 'none';
+    subEl.textContent = overlay.title || '';
     drawChart(canvas, data.candles, overlay);
     renderLegend(overlay);
   } catch (e) {
-    titleEl.textContent = ` — ${selectedSymbol} (no chart data cached yet)`;
-    canvas.style.display = 'none';
-    emptyEl.style.display = 'block';
-    emptyEl.textContent = 'no chart data cached yet — appears once this symbol matches again';
+    subEl.textContent = 'no chart data cached yet — appears once this symbol matches again';
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('chart-legend').innerHTML = '';
   }
 }
 
@@ -624,11 +851,7 @@ async function openChart(symbol) {
 document.getElementById('chart-close').addEventListener('click', (e) => {
   e.preventDefault();
   selectedSymbol = null;
-  document.getElementById('chart-canvas').style.display = 'none';
-  document.getElementById('chart-title').textContent = '';
-  document.getElementById('chart-empty').textContent = 'click a symbol below to see its chart';
-  document.getElementById('chart-empty').style.display = 'block';
-  document.getElementById('chart-legend').innerHTML = '';
+  document.getElementById('chart-drawer').hidden = true;
   renderAll();
 });
 
@@ -655,6 +878,7 @@ async function tick() {
 }
 tick();
 setInterval(tick, REFRESH_MS);
+showSection(location.hash.slice(1) || 'overview');
 </script>
 </body>
 </html>

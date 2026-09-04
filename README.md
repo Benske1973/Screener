@@ -173,12 +173,16 @@ local-high-web --config config.yaml --port 8080
 It's read-only: no orders, no Telegram, just the same analytics the CLI
 prints, in a browser. `python -m local_high.webapp ...` works too.
 
-Click any symbol in the New Local High, screener or pattern tables to open an
-altFINS-style candlestick chart for it — patterns draw their fitted
-support/resistance lines and measured-move target, New Local High setups draw
-the broken level, stop and TP1. Charts are canvas-drawn, no charting library.
-Only symbols currently matching something are cached for charting (not the
-whole universe) — the chart appears once a symbol next matches.
+altFINS-style layout: a left sidebar (Overview / New Local High / Screener /
+Chart Patterns) with live match-count badges, a scrollable content area per
+section, and an Overview page with stat cards and a preview of the top setups
+and latest breakouts. Click any symbol anywhere to open a candlestick chart
+in a drawer that stays open while you switch sections — patterns draw their
+fitted support/resistance lines and measured-move target, New Local High
+setups draw the broken level, stop and TP1. Canvas-drawn, no charting
+library, no build step. Only symbols currently matching something are cached
+for charting (not the whole universe) — the chart appears once a symbol next
+matches.
 
 ### Expose it through Cloudflare (no port-forwarding needed)
 
