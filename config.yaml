@@ -1,0 +1,107 @@
+# ---------------------------------------------------------------------------
+# local-high-scanner configuration
+# Percentage fields are percentage points: 1.5 means 1.5%.
+# ---------------------------------------------------------------------------
+
+# --- Data source -----------------------------------------------------------
+kucoin_base_url: https://api.kucoin.com
+timeframe: 1hour            # KuCoin candle type (1hour, 2hour, 4hour, 1day, ...)
+candle_history: 720         # candles requested per symbol per cycle (~30 days on 1h)
+request_timeout_seconds: 15
+max_concurrent_requests: 6  # parallel candle requests
+cycle_seconds: 300          # seconds between scan cycles
+universe_refresh_cycles: 12 # re-list KuCoin symbols every N cycles
+
+# --- Universe gates ------------------------------------------------------
+min_24h_quote_volume: 500000   # USDT 24h turnover; liquidity gate
+min_price: 0.00000001
+exclude_stablecoins: true
+exclude_leveraged: true
+symbol_allowlist: []           # if non-empty, ONLY these symbols are scanned
+symbol_denylist: []
+
+# --- New Local High detection ------------------------------------------
+lookbacks: [24, 120]           # 1h candles: 1-day high (early momentum) and 5-day high (structure)
+breakout_source: close         # close | high  -> value that must clear resistance
+prior_high_source: high        # high | close  -> how resistance is measured
+min_breakout_pct: 0.05         # trigger must exceed prior high by >= this
+require_fresh: true            # only fire when the just-closed candle newly makes the high
+near_high_pct: 1.5             # WATCH threshold: within this % below resistance
+max_breakout_distance_pct: 5.0 # alert gate: skip BREAKOUT ping when the close is already this far above the level (0 disables; state still tracked for the pullback/re-break)
+
+# --- Confluence score --------------------------------------------------
+rvol_lookback: 24              # candles for average-volume baseline
+trend_ema_len: 50              # last close above this EMA counts as uptrend
+atr_len: 14                    # ATR shown in alerts for stop sizing
+min_rvol: 1.0                  # alert gate: suppress BREAKOUT/REBREAK pings below this RVOL (0 disables; state still tracked)
+score_weights:
+  rvol: 1.0
+  change_24h: 0.5
+  breakout_strength: 1.0
+  trend: 0.5
+
+# --- Pullback / re-break state machine --------------------------------
+track_rebreak: true
+pullback_retest_pct: 0.5       # pullback confirmed when a candle low returns within this % of the broken resistance
+pullback_max_candles: 36       # abandon the setup if no re-break within N candles of the breakout (~1.5 days on 1h)
+invalidate_pct: 1.0            # close this far below the breakout level -> FAKEOUT
+rebreak_reset_candles: 12      # candles a REBREAK/FAKEOUT state lingers before reset
+
+# --- Risk hints in alerts --------------------------------------------
+stop_buffer_pct: 0.5           # suggested stop = breakout level * (1 - this%)
+
+# --- Trade plan / take-profit targets --------------------------------
+# The scanner emits a deterministic plan (entry, stop, targets) with every
+# BREAKOUT and REBREAK. Targets come from three methods, merged and sorted:
+target_r_multiples: [2.0, 3.0, 5.0]  # TP at entry + N * initial risk (entry - stop)
+target_measured_move: true           # + project the base height above the breakout level
+target_structure: true               # + prior swing-high resistance above the entry
+structure_swing_window: 3            # bars each side that define a pivot high
+structure_max_targets: 3
+max_targets: 5                       # hard cap on targets shown per setup
+extended_entry_warn_pct: 8.0         # warn when entry sits this far above the broken level
+breakeven_after_target: 1           # note: move stop to entry after TP{n} (0 = no note)
+
+# --- Alerts ----------------------------------------------------------
+alert_on: [BREAKOUT, REBREAK, FAKEOUT]   # any of WATCH, BREAKOUT, PULLBACK, REBREAK, FAKEOUT
+alert_on_seed: false          # alert for setups already in progress at first sight
+alert_cooldown_seconds: 21600 # per symbol + event kind
+telegram_enabled: true
+
+# --- Preset screeners (--screen NAME / --list-screens) ----------------
+# Stateless "does this symbol match right now" filters, independent of the
+# New Local High state machine above. Read-only: no alerts, no state file.
+screen_lookback: 20            # New Local High/Low: candles to look back
+screen_trend_fast_len: 12      # fast EMA for trend/crossover screens
+screen_trend_slow_len: 50      # slow EMA for trend/crossover screens
+screen_rsi_len: 14
+screen_rsi_oversold: 30.0       # Very Oversold threshold
+screen_rsi_oversold_mild: 45.0  # Oversold in Uptrend threshold
+screen_pullback_lookback: 5     # candles for the recent-high reference
+screen_pullback_min_pct: 1.0    # minimum dip off that high to count as a pullback
+screen_bb_len: 20
+screen_bb_stdev: 2.0
+screen_macd_fast: 12
+screen_macd_slow: 26
+screen_macd_signal: 9
+screen_min_rvol: 1.5            # RVOL Spike in Uptrend threshold
+
+# --- Chart-pattern detection (--patterns) ------------------------------
+# Fits a resistance line through recent swing highs and a support line
+# through recent swing lows, then classifies the pair (triangle / wedge /
+# channel) and reports emerging vs. breakout. See README for details.
+pattern_lookback_candles: 80    # candles considered per symbol
+pattern_swing_window: 3         # bars each side that define a swing high/low
+pattern_min_swings: 2           # minimum swing highs AND lows required
+pattern_min_r2: 0.5             # reject a line fit below this goodness-of-fit
+pattern_flat_slope_pct: 0.05    # |slope| below this (%/candle) counts as "flat"
+pattern_parallel_tol_pct: 0.08  # max slope difference (%/candle) to call two lines parallel
+pattern_breakout_pct: 0.5       # close must clear a line by this % to count as a breakout
+
+# --- Storage -------------------------------------------------------
+state_path: data/state.json
+events_csv: data/events.csv
+log_path: logs/scanner.jsonl
+
+# --- Web dashboard (local-high-web) ------------------------------------
+web_refresh_seconds: 60   # how often the dashboard re-scans the universe
