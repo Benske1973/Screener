@@ -43,7 +43,8 @@ PATTERNS = (
 class PatternLine:
     slope_pct: float   # % price change per candle, relative to the window's first close
     r2: float           # goodness of fit, 0-1
-    value_now: float     # the line's value at the last candle
+    value_now: float     # the line's value at the last candle in the fit window
+    value_start: float    # the line's value at the first candle in the fit window
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,8 +143,12 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
         pattern=pattern,
         status=status,
         price=last.close,
-        resistance=PatternLine(round(res_slope_pct, 4), round(res_r2, 3), resistance_now),
-        support=PatternLine(round(sup_slope_pct, 4), round(sup_r2, 3), support_now),
+        resistance=PatternLine(
+            round(res_slope_pct, 4), round(res_r2, 3), resistance_now, res_intercept
+        ),
+        support=PatternLine(
+            round(sup_slope_pct, 4), round(sup_r2, 3), support_now, sup_intercept
+        ),
         target=target,
         note=note,
     )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+import pytest
 from conftest import make_candles
 
 from local_high.patterns import detect_pattern
@@ -51,6 +52,10 @@ def test_ascending_triangle_emerging():
     assert match is not None
     assert match.pattern == "ascending_triangle"
     assert match.status == "emerging"
+    # resistance is flat: value_start and value_now should sit close together
+    assert match.resistance.value_start == pytest.approx(match.resistance.value_now, rel=0.01)
+    # support rises: value_now should be well above value_start
+    assert match.support.value_now > match.support.value_start
 
 
 def test_ascending_triangle_breakout_up_has_a_target():

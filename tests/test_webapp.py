@@ -88,6 +88,29 @@ async def test_auth_middleware_accepts_a_bearer_header(monkeypatch):
         assert resp.status == 200
 
 
+async def test_candles_endpoint_serves_the_cached_window():
+    state = WebState()
+    state.candles["AAA-USDT"] = [
+        {"t": 1000, "o": 1.0, "h": 1.2, "l": 0.9, "c": 1.1},
+        {"t": 2000, "o": 1.1, "h": 1.3, "l": 1.0, "c": 1.2},
+    ]
+    app = build_app(_cfg(), web_state=state, start_refresh=False)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/api/candles/AAA-USDT")
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["symbol"] == "AAA-USDT"
+        assert len(data["candles"]) == 2
+        assert data["candles"][0]["c"] == 1.1
+
+
+async def test_candles_endpoint_404s_for_an_unmatched_symbol():
+    app = build_app(_cfg(), web_state=WebState(), start_refresh=False)
+    async with TestClient(TestServer(app)) as client:
+        resp = await client.get("/api/candles/ZZZ-USDT")
+        assert resp.status == 404
+
+
 async def test_no_token_configured_means_open_access(monkeypatch):
     monkeypatch.delenv("LOCAL_HIGH_WEB_TOKEN", raising=False)
     app = build_app(_cfg(), web_state=WebState(), start_refresh=False)
