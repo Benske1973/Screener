@@ -135,6 +135,29 @@ two-line fit) and are intentionally out of scope for now. Tune the fit under
 `pattern_min_r2` rejects noisy/non-genuine lines, `pattern_flat_slope_pct` and
 `pattern_parallel_tol_pct` control triangle-vs-wedge-vs-channel classification.
 
+### Pattern breakout alerts
+
+`local-high-scanner` (the continuously-running CLI, not the read-only web
+dashboard) sends a Telegram message when a pattern breaks out **and**
+`pattern_confidence()` says it's a solid setup — not on every `breakout_up`,
+only a confident one:
+
+```
+confidence = fit·r² (both lines) + rvol (volume confirms it) + trend (breaks
+             with the broader trend) + strength (cleared the line by a
+             meaningful margin, not by a hair)
+```
+
+0-100, weighted by `pattern_confidence_weights` in config.yaml. Only alerts
+above `pattern_alert_min_score` (default 70) go out, one per symbol+pattern
+per `pattern_alert_cooldown_seconds` (default 6h, same cooldown concept as
+the New Local High alerts). By default only bullish breakouts
+(`pattern_alert_directions: [breakout_up]`) alert — add `breakout_down` for
+bearish setups too. Turn it off entirely with `pattern_alerts_enabled: false`.
+
+Like every alert in this project: a research signal, not a trade — the
+scanner never opens a position.
+
 ## Web dashboard
 
 `local-high-web` serves the New Local High board, every preset screener, and

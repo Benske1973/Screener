@@ -42,6 +42,19 @@ class ScoreWeights:
 
 
 @dataclass(frozen=True, slots=True)
+class PatternScoreWeights:
+    """Weights for pattern_confidence() - how 'solid' a pattern breakout looks."""
+
+    fit: float = 1.0        # goodness of fit (r2) of the two trendlines
+    rvol: float = 1.0        # volume confirming the breakout
+    trend: float = 0.5        # breakout in the direction of the broader trend
+    strength: float = 1.0      # how far price cleared the line, relative to pattern height
+
+    def total(self) -> float:
+        return self.fit + self.rvol + self.trend + self.strength
+
+
+@dataclass(frozen=True, slots=True)
 class Config:
     # data source
     kucoin_base_url: str = "https://api.kucoin.com"
@@ -126,6 +139,13 @@ class Config:
     pattern_flat_slope_pct: float = 0.05
     pattern_parallel_tol_pct: float = 0.08
     pattern_breakout_pct: float = 0.5
+
+    # chart-pattern breakout alerts (Telegram, via local-high-scanner)
+    pattern_alerts_enabled: bool = True
+    pattern_alert_directions: tuple[str, ...] = ("breakout_up",)
+    pattern_alert_min_score: float = 70.0
+    pattern_alert_cooldown_seconds: int = 21_600
+    pattern_confidence_weights: PatternScoreWeights = field(default_factory=PatternScoreWeights)
 
     # storage
     state_path: str = "data/state.json"
@@ -218,6 +238,17 @@ class Config:
             raise ConfigError("pattern_breakout_pct must be >= 0")
         if self.web_refresh_seconds < 5:
             raise ConfigError("web_refresh_seconds must be >= 5")
+        bad_dirs = [
+            d for d in self.pattern_alert_directions if d not in ("breakout_up", "breakout_down")
+        ]
+        if bad_dirs:
+            raise ConfigError(f"pattern_alert_directions contains invalid values: {bad_dirs}")
+        if not (0 <= self.pattern_alert_min_score <= 100):
+            raise ConfigError("pattern_alert_min_score must be between 0 and 100")
+        if self.pattern_alert_cooldown_seconds < 0:
+            raise ConfigError("pattern_alert_cooldown_seconds must be >= 0")
+        if self.pattern_confidence_weights.total() <= 0:
+            raise ConfigError("pattern_confidence_weights must sum to a positive number")
 
 
 def _coerce(raw: dict[str, Any]) -> Config:
@@ -237,12 +268,25 @@ def _coerce(raw: dict[str, Any]) -> Config:
             raise ConfigError(f"unknown score_weights keys: {', '.join(sorted(sw_unknown))}")
         data["score_weights"] = ScoreWeights(**sw)
 
+    if "pattern_confidence_weights" in data:
+        pw = data["pattern_confidence_weights"]
+        if not isinstance(pw, dict):
+            raise ConfigError("pattern_confidence_weights must be a mapping")
+        pw_known = {f.name for f in fields(PatternScoreWeights)}
+        pw_unknown = set(pw) - pw_known
+        if pw_unknown:
+            raise ConfigError(
+                f"unknown pattern_confidence_weights keys: {', '.join(sorted(pw_unknown))}"
+            )
+        data["pattern_confidence_weights"] = PatternScoreWeights(**pw)
+
     for key in (
         "lookbacks",
         "symbol_allowlist",
         "symbol_denylist",
         "alert_on",
         "target_r_multiples",
+        "pattern_alert_directions",
     ):
         if key in data and data[key] is not None:
             data[key] = tuple(data[key])

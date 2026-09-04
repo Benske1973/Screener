@@ -98,6 +98,19 @@ pattern_flat_slope_pct: 0.05    # |slope| below this (%/candle) counts as "flat"
 pattern_parallel_tol_pct: 0.08  # max slope difference (%/candle) to call two lines parallel
 pattern_breakout_pct: 0.5       # close must clear a line by this % to count as a breakout
 
+# --- Chart-pattern breakout alerts (Telegram, local-high-scanner only) ---
+# Only alerts on a bullish breakout (price expected to rise) by default, and
+# only when pattern_confidence() clears pattern_alert_min_score - see README.
+pattern_alerts_enabled: true
+pattern_alert_directions: [breakout_up]     # add breakout_down for bearish alerts too
+pattern_alert_min_score: 70.0               # 0-100 confidence gate
+pattern_alert_cooldown_seconds: 21600       # per symbol + pattern, like alert_cooldown_seconds
+pattern_confidence_weights:
+  fit: 1.0        # goodness of fit (r2) of the two trendlines
+  rvol: 1.0        # volume confirming the breakout
+  trend: 0.5        # breakout in the direction of the broader trend
+  strength: 1.0      # how far price cleared the line, relative to pattern height
+
 # --- Storage -------------------------------------------------------
 state_path: data/state.json
 events_csv: data/events.csv

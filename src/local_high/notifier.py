@@ -88,6 +88,38 @@ def format_message(event: Event, timeframe: str, atr_len: int) -> str:
     return "\n".join(lines)
 
 
+_PATTERN_LABELS = {
+    "ascending_triangle": "Ascending Triangle",
+    "descending_triangle": "Descending Triangle",
+    "rising_wedge": "Rising Wedge",
+    "falling_wedge": "Falling Wedge",
+    "ascending_channel": "Ascending Channel",
+    "descending_channel": "Descending Channel",
+}
+_PATTERN_EMOJI = {"breakout_up": "\U0001f680", "breakout_down": "\U0001f53b"}  # rocket / red tri
+
+
+def format_pattern_alert(match: PatternMatch, score: float, timeframe: str) -> str:
+    label = _PATTERN_LABELS.get(match.pattern, match.pattern)
+    direction = "Bullish" if match.status == "breakout_up" else "Bearish"
+    lines = [
+        f"{_PATTERN_EMOJI.get(match.status, '')} PATROON-UITBRAAK — {match.symbol}",
+        f"TF {timeframe} · {label} · {direction} breakout",
+        f"Prijs: {_fmt(match.price)}",
+        f"Weerstand: {_fmt(match.resistance.value_now)}   Steun: {_fmt(match.support.value_now)}",
+    ]
+    if match.target is not None:
+        gain_pct = (match.target / match.price - 1.0) * 100.0
+        lines.append(f"Koersdoel (measured move): {_fmt(match.target)}  ({gain_pct:+.1f}%)")
+    lines += [
+        f"Betrouwbaarheid: {score:.0f}/100  "
+        f"(fit r2 {match.resistance.r2:.2f}/{match.support.r2:.2f})",
+        match.note,
+        "— research-signaal, geen order geplaatst.",
+    ]
+    return "\n".join(lines)
+
+
 class TelegramNotifier:
     def __init__(
         self,

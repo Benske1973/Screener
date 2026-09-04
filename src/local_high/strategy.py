@@ -45,6 +45,9 @@ class SymbolState:
     pullback_low: float = 0.0
     seeded: bool = False
     alerts: dict[str, int] = field(default_factory=dict)
+    # cooldown tracker for chart-pattern breakout alerts, keyed "<pattern>:<status>"
+    # - separate from `alerts` above, which is only for NLH state-machine events.
+    pattern_alerts: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -56,6 +59,7 @@ class SymbolState:
         data.setdefault("symbol", raw.get("symbol", "?"))
         state = cls(**data)
         state.alerts = {str(k): int(v) for k, v in (state.alerts or {}).items()}
+        state.pattern_alerts = {str(k): int(v) for k, v in (state.pattern_alerts or {}).items()}
         return state
 
 
@@ -401,4 +405,5 @@ def _plan_for_state(
 def _copy_state(state: SymbolState) -> SymbolState:
     clone = SymbolState(**{k: getattr(state, k) for k in SymbolState.__dataclass_fields__})
     clone.alerts = dict(state.alerts)
+    clone.pattern_alerts = dict(state.pattern_alerts)
     return clone

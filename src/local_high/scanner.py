@@ -6,11 +6,18 @@ import time
 
 from local_high.config import Config
 from local_high.events import EventLog
-from local_high.indicators import closed_only, parse_kucoin_candles
+from local_high.indicators import Candle, closed_only, parse_kucoin_candles
 from local_high.kucoin import KuCoinApiError, KuCoinRestClient, Ticker
-from local_high.notifier import TelegramNotifier, format_message, render_table
+from local_high.notifier import (
+    TelegramNotifier,
+    format_message,
+    format_pattern_alert,
+    render_table,
+)
+from local_high.patterns import PatternMatch, detect_pattern
+from local_high.scoring import pattern_confidence
 from local_high.state import StateStore
-from local_high.strategy import Evaluation, Event, evaluate
+from local_high.strategy import Evaluation, Event, SymbolState, evaluate
 from local_high.universe import SymbolInfo, filter_universe
 
 LOGGER = logging.getLogger("local_high.scanner")
@@ -32,6 +39,7 @@ class Scanner:
         self._symbols: list[SymbolInfo] = []
         self._universe: list[str] = []
         self._cycle = 0
+        self._pending_pattern_alerts: list[tuple[PatternMatch, float]] = []
 
     async def run_forever(self) -> None:
         self.state.load()
@@ -62,6 +70,7 @@ class Scanner:
             evaluations = await self._scan(client, tickers, now_ms)
 
         await self._emit(evaluations, now_ms)
+        await self._emit_patterns()
         self.state.prune(set(self._universe))
         self.state.save()
         print(render_table(self._cycle, len(self._universe), evaluations, now_ms), flush=True)
@@ -90,9 +99,11 @@ class Scanner:
     ) -> list[Evaluation]:
         sem = asyncio.Semaphore(self.cfg.max_concurrent_requests)
         end_at = now_ms // 1000
+        now_s = end_at
         start_at = end_at - self.cfg.candle_history * self.cfg.interval_seconds
         need = self.cfg.max_lookback + 3
         short_history = 0
+        pattern_alerts: list[tuple[PatternMatch, float]] = []
 
         async def worker(symbol: str) -> Evaluation | None:
             nonlocal short_history
@@ -114,9 +125,11 @@ class Scanner:
             prior = self.state.get(symbol)
             result = evaluate(symbol, candles, tickers.get(symbol), self.cfg, prior)
             self.state.put(result.state)
+            self._check_pattern_alert(symbol, candles, result.state, now_s, pattern_alerts)
             return result
 
         gathered = await asyncio.gather(*(worker(s) for s in self._universe))
+        self._pending_pattern_alerts = pattern_alerts
         if short_history:
             LOGGER.warning(
                 "%d/%d symbols had < %d candles (need %d for max lookback %d) - "
@@ -128,6 +141,44 @@ class Scanner:
                 self.cfg.max_lookback,
             )
         return [e for e in gathered if e is not None]
+
+    def _check_pattern_alert(
+        self,
+        symbol: str,
+        candles: list[Candle],
+        state: SymbolState,
+        now_s: int,
+        out: list[tuple[PatternMatch, float]],
+    ) -> None:
+        """Detect a chart pattern for ``symbol`` and queue a Telegram alert when it's
+        a fresh, high-confidence breakout in a configured direction (cooldown per
+        symbol + pattern, tracked in ``state.pattern_alerts``)."""
+        if not self.cfg.pattern_alerts_enabled:
+            return
+        match = detect_pattern(symbol, candles, self.cfg)
+        if match is None or match.status not in self.cfg.pattern_alert_directions:
+            return
+        score = pattern_confidence(candles, match, self.cfg)
+        if score < self.cfg.pattern_alert_min_score:
+            return
+        key = f"{match.pattern}:{match.status}"
+        last = state.pattern_alerts.get(key, 0)
+        if now_s - last < self.cfg.pattern_alert_cooldown_seconds:
+            return
+        state.pattern_alerts[key] = now_s
+        out.append((match, score))
+
+    async def _emit_patterns(self) -> None:
+        for match, score in self._pending_pattern_alerts:
+            message = format_pattern_alert(match, score, self.cfg.timeframe)
+            print(f"\n*** PATTERN ALERT ***\n{message}\n", flush=True)
+            LOGGER.info(
+                "pattern alert %s %s score=%.0f", match.pattern, match.symbol, score
+            )
+            if self.dry_run or self.telegram is None:
+                continue
+            await self.telegram.send(message)
+            await asyncio.sleep(0.4)  # stay well under Telegram's per-chat rate limit
 
     # ------------------------------------------------------------------ #
     async def _emit(self, evaluations: list[Evaluation], now_ms: int) -> None:
