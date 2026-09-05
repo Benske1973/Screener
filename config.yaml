@@ -99,6 +99,12 @@ pattern_parallel_tol_pct: 0.08  # max slope difference (%/candle) to call two li
 pattern_breakout_pct: 0.5       # close must clear a line by this % to count as a breakout
 hs_shoulder_tolerance_pct: 12.0  # max % difference between the two shoulders (head-and-shoulders)
 hs_min_head_prominence_pct: 3.0  # head must clear both shoulders by at least this %
+# Head-and-shoulders bases can take weeks to form - a separate, much longer
+# window than pattern_lookback_candles above, with a coarser swing filter so
+# only prominent shoulders/heads register, not minor noise. Must stay <=
+# candle_history (below) or there isn't enough fetched history to fill it.
+hs_lookback_candles: 600         # ~25 days on 1h
+hs_swing_window: 8               # bars each side for a swing to count
 
 # --- Chart-pattern breakout alerts (Telegram, local-high-scanner only) ---
 # Only alerts on a bullish breakout (price expected to rise) by default, and

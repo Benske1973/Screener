@@ -59,7 +59,7 @@ class Config:
     # data source
     kucoin_base_url: str = "https://api.kucoin.com"
     timeframe: str = "4hour"
-    candle_history: int = 400
+    candle_history: int = 720
     request_timeout_seconds: float = 15.0
     max_concurrent_requests: int = 6
     cycle_seconds: int = 300
@@ -141,6 +141,11 @@ class Config:
     pattern_breakout_pct: float = 0.5
     hs_shoulder_tolerance_pct: float = 12.0
     hs_min_head_prominence_pct: float = 3.0
+    # head-and-shoulders bases can take weeks to form - a separate, much
+    # longer window than pattern_lookback_candles, with a coarser swing
+    # filter so only prominent shoulders/heads register, not minor noise.
+    hs_lookback_candles: int = 600
+    hs_swing_window: int = 8
 
     # chart-pattern breakout alerts (Telegram, via local-high-scanner)
     pattern_alerts_enabled: bool = True
@@ -253,6 +258,16 @@ class Config:
             raise ConfigError("hs_shoulder_tolerance_pct must be > 0")
         if self.hs_min_head_prominence_pct < 0:
             raise ConfigError("hs_min_head_prominence_pct must be >= 0")
+        if self.hs_swing_window < 1:
+            raise ConfigError("hs_swing_window must be >= 1")
+        if self.hs_lookback_candles < self.hs_swing_window * 4:
+            raise ConfigError("hs_lookback_candles must be >= hs_swing_window * 4")
+        if self.hs_lookback_candles > self.candle_history:
+            raise ConfigError(
+                f"hs_lookback_candles ({self.hs_lookback_candles}) must be <= "
+                f"candle_history ({self.candle_history}) or there won't be enough "
+                "fetched history to fill the window"
+            )
         if self.web_refresh_seconds < 5:
             raise ConfigError("web_refresh_seconds must be >= 5")
         bad_dirs = [

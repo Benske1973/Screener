@@ -144,6 +144,15 @@ triangle-vs-wedge-vs-channel classification. Tune head-and-shoulders with
 `hs_shoulder_tolerance_pct` (how close the two shoulders must be) and
 `hs_min_head_prominence_pct` (how clearly the head must clear them).
 
+**Head-and-shoulders uses its own, much longer window** (`hs_lookback_candles`,
+default 600 ≈ 25 days on 1h, vs. `pattern_lookback_candles`'s 80 ≈ 3.3 days)
+with a coarser swing filter (`hs_swing_window`, default 8 bars each side, vs.
+`pattern_swing_window`'s 3) — a multi-week base needs far more history than a
+triangle or wedge, which typically forms in days. Sharing one window would
+either miss slow reversals (too short) or blur fast patterns into noise (too
+long). `hs_lookback_candles` must stay ≤ `candle_history` (both fetched from
+KuCoin) or there isn't enough history to fill the window.
+
 ### Pattern breakout alerts
 
 `local-high-scanner` (the continuously-running CLI, not the read-only web

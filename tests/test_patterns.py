@@ -34,6 +34,8 @@ def _pattern_cfg(cfg):
         pattern_flat_slope_pct=0.05,
         pattern_parallel_tol_pct=0.08,
         pattern_breakout_pct=0.5,
+        hs_lookback_candles=100,
+        hs_swing_window=1,
     )
 
 

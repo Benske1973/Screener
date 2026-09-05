@@ -50,6 +50,11 @@ PATTERNS = (
     "head_and_shoulders",
 )
 
+# head-and-shoulders matches are fit over `hs_lookback_candles`, not
+# `pattern_lookback_candles` - callers that cache a candle window for
+# charting (see webapp.py) need to know which window a given match used.
+HS_PATTERNS = frozenset({"inverse_head_and_shoulders", "head_and_shoulders"})
+
 
 @dataclass(frozen=True, slots=True)
 class PatternLine:
@@ -95,12 +100,26 @@ def _classify(res_slope_pct: float, sup_slope_pct: float, cfg: Config) -> str | 
 
 
 def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMatch | None:
-    """Detect a chart pattern over the trailing `pattern_lookback_candles`.
+    """Detect a chart pattern, trying head-and-shoulders first (a more specific,
+    three-extreme shape), then falling back to the channel-pattern (triangle/
+    wedge/channel) fit. ``candles`` must be closed candles in ascending order.
 
-    Tries head-and-shoulders first (a more specific, three-extreme shape),
-    then falls back to the channel-pattern (triangle/wedge/channel) fit.
-    ``candles`` must be closed candles in ascending time order.
+    The two detectors use **different** windows on purpose: a multi-week
+    head-and-shoulders base needs far more history than a triangle/wedge,
+    which typically forms in days - one shared window would either miss slow
+    reversals (too short) or blur fast patterns into noise (too long). See
+    `hs_lookback_candles`/`hs_swing_window` vs. `pattern_lookback_candles`/
+    `pattern_swing_window` in config.yaml.
     """
+    hs = _detect_head_and_shoulders_windowed(symbol, candles, cfg)
+    if hs is not None:
+        return hs
+    return _detect_channel_pattern_windowed(symbol, candles, cfg)
+
+
+def _detect_channel_pattern_windowed(
+    symbol: str, candles: list[Candle], cfg: Config
+) -> PatternMatch | None:
     n = len(candles)
     win = min(cfg.pattern_lookback_candles, n)
     if win < cfg.pattern_swing_window * 4:
@@ -108,11 +127,20 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
     window = candles[-win:]
     highs = swing_highs(window, cfg.pattern_swing_window)
     lows = swing_lows(window, cfg.pattern_swing_window)
-
-    hs = _detect_head_and_shoulders(symbol, window, highs, lows, cfg)
-    if hs is not None:
-        return hs
     return _detect_channel_pattern(symbol, window, highs, lows, cfg)
+
+
+def _detect_head_and_shoulders_windowed(
+    symbol: str, candles: list[Candle], cfg: Config
+) -> PatternMatch | None:
+    n = len(candles)
+    win = min(cfg.hs_lookback_candles, n)
+    if win < cfg.hs_swing_window * 4:
+        return None
+    window = candles[-win:]
+    highs = swing_highs(window, cfg.hs_swing_window)
+    lows = swing_lows(window, cfg.hs_swing_window)
+    return _detect_head_and_shoulders(symbol, window, highs, lows, cfg)
 
 
 def _detect_channel_pattern(

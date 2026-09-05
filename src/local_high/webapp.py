@@ -18,7 +18,7 @@ from local_high.config import Config, ConfigError, load_config
 from local_high.indicators import Candle, closed_only, parse_kucoin_candles
 from local_high.kucoin import KuCoinApiError, KuCoinRestClient
 from local_high.logsetup import configure_logging
-from local_high.patterns import PatternMatch, detect_pattern
+from local_high.patterns import HS_PATTERNS, PatternMatch, detect_pattern
 from local_high.screens import SCREENS, ScreenMatch
 from local_high.state import StateStore
 from local_high.strategy import Evaluation, evaluate
@@ -142,9 +142,6 @@ async def _refresh_once(cfg: Config, web_state: WebState, symbol_states: StateSt
         screens_acc: dict[str, list[dict[str, Any]]] = {name: [] for name in SCREENS}
         patterns_acc: list[dict[str, Any]] = []
         candles_acc: dict[str, list[dict[str, Any]]] = {}
-        # Must match the window detect_pattern() fits lines over exactly, so a
-        # pattern's value_start/value_now line up with index 0 / index -1 here.
-        chart_window = cfg.pattern_lookback_candles
 
         async def worker(symbol: str) -> None:
             async with sem:
@@ -181,6 +178,15 @@ async def _refresh_once(cfg: Config, web_state: WebState, symbol_states: StateSt
                 interesting = True
 
             if interesting and len(candles) >= 4:
+                # Must match the window detect_pattern() fit lines over exactly, so
+                # a pattern's value_start/value_now line up with index 0 / index -1
+                # here - head-and-shoulders fits over a much longer window than the
+                # channel patterns (triangle/wedge/channel), so the two need
+                # different candle caches, picked by which pattern actually matched.
+                if pattern is not None and pattern.pattern in HS_PATTERNS:
+                    chart_window = cfg.hs_lookback_candles
+                else:
+                    chart_window = cfg.pattern_lookback_candles
                 candles_acc[symbol] = _candle_rows(candles, chart_window)
 
         await asyncio.gather(*(worker(s) for s in universe))
