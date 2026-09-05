@@ -151,6 +151,13 @@ class Config:
     heartbeat_enabled: bool = True
     heartbeat_interval_seconds: int = 86_400
 
+    # alert noise control (Telegram, local-high-scanner only)
+    # Bundles every alert a cycle produces (NLH + pattern breakouts) into one
+    # Telegram message instead of one message per alert, capped and sorted by
+    # score - so a busy market sends you one digest, not a wall of pings.
+    alert_digest_mode: bool = True
+    alert_digest_max_items: int = 8
+
     # storage
     state_path: str = "data/state.json"
     events_csv: str = "data/events.csv"
@@ -255,6 +262,8 @@ class Config:
             raise ConfigError("pattern_confidence_weights must sum to a positive number")
         if self.heartbeat_interval_seconds < 60:
             raise ConfigError("heartbeat_interval_seconds must be >= 60")
+        if self.alert_digest_max_items < 1:
+            raise ConfigError("alert_digest_max_items must be >= 1")
 
 
 def _coerce(raw: dict[str, Any]) -> Config:

@@ -117,6 +117,68 @@ def test_watch_event_not_rvol_gated(cfg):
     assert scanner._should_alert(_evaluation(0.1), _event(WATCH), now_s=10_000_000) is True
 
 
+class _FakeTelegram:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+
+    async def send(self, text: str) -> bool:
+        self.sent.append(text)
+        return True
+
+
+def test_emit_collects_digest_items_instead_of_sending(cfg):
+    telegram = _FakeTelegram()
+    scanner = Scanner(
+        replace(cfg, alert_on=("BREAKOUT",), min_rvol=0.0, alert_digest_mode=True),
+        telegram=telegram,
+    )
+    ev = _evaluation(3.0)
+    ev.events.append(_event(BREAKOUT))
+    items = list(_run(scanner._emit([ev], now_ms=10_000_000_000)))
+    assert len(items) == 1
+    assert items[0][0] == ev.events[0].score
+    assert telegram.sent == []  # nothing sent yet - collected for the digest
+
+
+def test_emit_sends_immediately_without_digest_mode(cfg):
+    telegram = _FakeTelegram()
+    scanner = Scanner(
+        replace(cfg, alert_on=("BREAKOUT",), min_rvol=0.0, alert_digest_mode=False),
+        telegram=telegram,
+    )
+    ev = _evaluation(3.0)
+    ev.events.append(_event(BREAKOUT))
+    items = list(_run(scanner._emit([ev], now_ms=10_000_000_000)))
+    assert items == []             # nothing held back for a digest
+    assert len(telegram.sent) == 1  # sent right away instead
+
+
+def test_send_digest_combines_and_caps_items(cfg):
+    telegram = _FakeTelegram()
+    scanner = Scanner(replace(cfg, alert_digest_max_items=2), telegram=telegram)
+    items = [(90.0, "top setup"), (80.0, "second setup"), (10.0, "weakest setup")]
+    _run(scanner._send_digest(items))
+    assert len(telegram.sent) == 1
+    combined = telegram.sent[0]
+    assert "top setup" in combined
+    assert "second setup" in combined
+    assert "weakest setup" not in combined  # capped out
+    assert "1 andere melding" in combined
+
+
+def test_send_digest_does_nothing_for_an_empty_cycle(cfg):
+    telegram = _FakeTelegram()
+    scanner = Scanner(cfg, telegram=telegram)
+    _run(scanner._send_digest([]))
+    assert telegram.sent == []
+
+
+def _run(coro):
+    import asyncio
+
+    return asyncio.run(coro)
+
+
 def _pattern_scanner_cfg(**over):
     base = dict(pattern_swing_window=1, pattern_min_swings=2, pattern_min_r2=0.5)
     base.update(over)

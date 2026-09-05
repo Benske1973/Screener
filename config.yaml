@@ -117,6 +117,13 @@ pattern_confidence_weights:
 heartbeat_enabled: true
 heartbeat_interval_seconds: 86400   # 24h
 
+# --- Alert noise control (Telegram, local-high-scanner only) -----------
+# Bundle every alert a cycle produces (NLH + pattern breakouts) into one
+# Telegram message instead of one message per alert - a busy market sends
+# you one digest, not a wall of pings. Set false for the old per-alert pings.
+alert_digest_mode: true
+alert_digest_max_items: 8   # best-scored first; rest noted as "N more"
+
 # --- Storage -------------------------------------------------------
 state_path: data/state.json
 events_csv: data/events.csv

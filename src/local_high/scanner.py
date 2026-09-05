@@ -70,8 +70,10 @@ class Scanner:
                 await self._refresh_universe(client, tickers)
             evaluations = await self._scan(client, tickers, now_ms)
 
-        await self._emit(evaluations, now_ms)
-        await self._emit_patterns()
+        nlh_items = await self._emit(evaluations, now_ms)
+        pattern_items = await self._emit_patterns()
+        if self.cfg.alert_digest_mode:
+            await self._send_digest(nlh_items + pattern_items)
         await self._maybe_heartbeat(now_ms)
         self.state.prune(set(self._universe))
         self.state.save()
@@ -170,17 +172,39 @@ class Scanner:
         state.pattern_alerts[key] = now_s
         out.append((match, score))
 
-    async def _emit_patterns(self) -> None:
+    async def _emit_patterns(self) -> list[tuple[float, str]]:
+        digest_items: list[tuple[float, str]] = []
         for match, score in self._pending_pattern_alerts:
             message = format_pattern_alert(match, score, self.cfg.timeframe)
-            print(f"\n*** PATTERN ALERT ***\n{message}\n", flush=True)
-            LOGGER.info(
-                "pattern alert %s %s score=%.0f", match.pattern, match.symbol, score
-            )
-            if self.dry_run or self.telegram is None:
-                continue
-            await self.telegram.send(message)
-            await asyncio.sleep(0.4)  # stay well under Telegram's per-chat rate limit
+            LOGGER.info("pattern alert %s %s score=%.0f", match.pattern, match.symbol, score)
+            if self.cfg.alert_digest_mode:
+                digest_items.append((score, message))
+            else:
+                await self._send_single(
+                    message, log_label=f"pattern {match.pattern} {match.symbol}"
+                )
+        return digest_items
+
+    async def _send_digest(self, items: list[tuple[float, str]]) -> None:
+        """Combine one cycle's alerts into a single Telegram message, best-scored
+        first and capped at ``alert_digest_max_items`` - so a busy market sends one
+        message, not one ping per setup."""
+        if not items:
+            return
+        items.sort(key=lambda item: item[0], reverse=True)
+        cap = self.cfg.alert_digest_max_items
+        shown, extra = items[:cap], items[cap:]
+        blocks = [text for _, text in shown]
+        if extra:
+            blocks.append(f"… en {len(extra)} andere melding(en) deze cyclus (zie dashboard).")
+        message = "\n\n———\n\n".join(blocks)
+        if len(message) > 3900:
+            message = message[:3900] + "\n… (afgekapt, zie dashboard/console voor het geheel)"
+        print(f"\n*** ALERT DIGEST ({len(items)}) ***\n{message}\n", flush=True)
+        LOGGER.info("alert digest sent: %d item(s), %d shown", len(items), len(shown))
+        if self.dry_run or self.telegram is None:
+            return
+        await self.telegram.send(message)
 
     async def _maybe_heartbeat(self, now_ms: int) -> None:
         """Send a periodic 'still alive' ping so silence never means 'did it crash?'.
@@ -210,14 +234,23 @@ class Scanner:
         await self.telegram.send(message)
 
     # ------------------------------------------------------------------ #
-    async def _emit(self, evaluations: list[Evaluation], now_ms: int) -> None:
+    async def _emit(self, evaluations: list[Evaluation], now_ms: int) -> list[tuple[float, str]]:
         now_s = now_ms // 1000
+        digest_items: list[tuple[float, str]] = []
         for ev in evaluations:
             for event in ev.events:
                 self.events.append(event, now_ms=now_ms)
                 if self._should_alert(ev, event, now_s):
                     ev.state.alerts[event.kind] = now_s
-                    await self._send_alert(event)
+                    message = format_message(event, self.cfg.timeframe, self.cfg.atr_len)
+                    LOGGER.info("alert %s %s score=%.0f", event.kind, event.symbol, event.score)
+                    if self.cfg.alert_digest_mode:
+                        digest_items.append((event.score, message))
+                    else:
+                        await self._send_single(
+                            message, log_label=f"{event.kind} {event.symbol}"
+                        )
+        return digest_items
 
     _RVOL_GATED = frozenset({"BREAKOUT", "REBREAK"})
 
@@ -254,10 +287,9 @@ class Scanner:
         last = ev.state.alerts.get(event.kind, 0)
         return now_s - last >= self.cfg.alert_cooldown_seconds
 
-    async def _send_alert(self, event: Event) -> None:
-        message = format_message(event, self.cfg.timeframe, self.cfg.atr_len)
+    async def _send_single(self, message: str, *, log_label: str) -> None:
         print(f"\n*** ALERT ***\n{message}\n", flush=True)
-        LOGGER.info("alert %s %s score=%.0f", event.kind, event.symbol, event.score)
+        LOGGER.info("alert sent: %s", log_label)
         if self.dry_run or self.telegram is None:
             return
         await self.telegram.send(message)

@@ -168,6 +168,15 @@ the first cycle after a fresh `data/state.json`, then every
 persisted, so it survives a restart instead of re-firing immediately. Turn
 it off with `heartbeat_enabled: false`.
 
+### Alert digest (noise control)
+
+On a volatile day, many symbols can qualify for an alert in the same cycle.
+By default `alert_digest_mode: true` bundles everything one cycle produces —
+New Local High events and pattern breakouts together — into **one** Telegram
+message, best-scored first, capped at `alert_digest_max_items` (default 8;
+the rest are noted as "N andere melding(en)"). Set it to `false` to go back
+to one Telegram message per alert, sent immediately as each is found.
+
 ## Web dashboard
 
 `local-high-web` serves the New Local High board, every preset screener, and
