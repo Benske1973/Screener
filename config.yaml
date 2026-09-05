@@ -97,6 +97,8 @@ pattern_min_r2: 0.5             # reject a line fit below this goodness-of-fit
 pattern_flat_slope_pct: 0.05    # |slope| below this (%/candle) counts as "flat"
 pattern_parallel_tol_pct: 0.08  # max slope difference (%/candle) to call two lines parallel
 pattern_breakout_pct: 0.5       # close must clear a line by this % to count as a breakout
+hs_shoulder_tolerance_pct: 12.0  # max % difference between the two shoulders (head-and-shoulders)
+hs_min_head_prominence_pct: 3.0  # head must clear both shoulders by at least this %
 
 # --- Chart-pattern breakout alerts (Telegram, local-high-scanner only) ---
 # Only alerts on a bullish breakout (price expected to rise) by default, and

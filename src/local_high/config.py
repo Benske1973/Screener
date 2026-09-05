@@ -139,6 +139,8 @@ class Config:
     pattern_flat_slope_pct: float = 0.05
     pattern_parallel_tol_pct: float = 0.08
     pattern_breakout_pct: float = 0.5
+    hs_shoulder_tolerance_pct: float = 12.0
+    hs_min_head_prominence_pct: float = 3.0
 
     # chart-pattern breakout alerts (Telegram, via local-high-scanner)
     pattern_alerts_enabled: bool = True
@@ -247,6 +249,10 @@ class Config:
             raise ConfigError("pattern_flat_slope_pct / pattern_parallel_tol_pct must be >= 0")
         if self.pattern_breakout_pct < 0:
             raise ConfigError("pattern_breakout_pct must be >= 0")
+        if self.hs_shoulder_tolerance_pct <= 0:
+            raise ConfigError("hs_shoulder_tolerance_pct must be > 0")
+        if self.hs_min_head_prominence_pct < 0:
+            raise ConfigError("hs_min_head_prominence_pct must be >= 0")
         if self.web_refresh_seconds < 5:
             raise ConfigError("web_refresh_seconds must be >= 5")
         bad_dirs = [

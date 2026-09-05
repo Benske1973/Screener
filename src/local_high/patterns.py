@@ -18,15 +18,25 @@ from local_high.kucoin import KuCoinApiError, KuCoinRestClient
 from local_high.universe import filter_universe
 
 # ----------------------------------------------------------------------------
-# Rule-based chart-pattern detection, altFINS-style: fit a trendline through
-# recent swing highs (resistance) and swing lows (support), classify the pair
-# by slope, and report whether price is still trading between the lines
-# ("emerging") or has just cleared one of them ("breakout_up"/"breakout_down").
+# Rule-based chart-pattern detection, altFINS-style.
 #
-# Covers triangles, wedges and channels - the geometrically well-defined
-# patterns. Head-and-shoulders / double top-bottom need a separate detector
-# (peak/trough counting, not a two-line fit) and are intentionally out of
-# scope here.
+# Two families, both reported through the same PatternMatch shape (a
+# "resistance" line, a "support" line, a status, a measured-move target):
+#
+# 1. Channel patterns - fit a trendline through recent swing highs
+#    (resistance) and swing lows (support), classify the pair by slope, and
+#    report whether price is still trading between the lines ("emerging")
+#    or has just cleared one of them ("breakout_up"/"breakout_down"). Covers
+#    triangles, wedges and channels.
+# 2. Head-and-shoulders - three alternating swing extremes (shoulder, head,
+#    shoulder) with the head clearing both shoulders, plus a neckline fit
+#    through the two swings between them. "resistance"/"support" become the
+#    neckline and a flat reference line at the head - whichever sits higher
+#    is "resistance" - so the rest of the pipeline (confidence scoring,
+#    alerting, the dashboard's chart drawer) needs no pattern-specific code.
+#
+# Double top/bottom would need a third detector (two comparable extremes, no
+# head) and isn't implemented.
 # ----------------------------------------------------------------------------
 
 PATTERNS = (
@@ -36,6 +46,8 @@ PATTERNS = (
     "falling_wedge",
     "ascending_channel",
     "descending_channel",
+    "inverse_head_and_shoulders",
+    "head_and_shoulders",
 )
 
 
@@ -83,8 +95,10 @@ def _classify(res_slope_pct: float, sup_slope_pct: float, cfg: Config) -> str | 
 
 
 def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMatch | None:
-    """Fit support/resistance over the trailing `pattern_lookback_candles` and classify.
+    """Detect a chart pattern over the trailing `pattern_lookback_candles`.
 
+    Tries head-and-shoulders first (a more specific, three-extreme shape),
+    then falls back to the channel-pattern (triangle/wedge/channel) fit.
     ``candles`` must be closed candles in ascending time order.
     """
     n = len(candles)
@@ -92,9 +106,22 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
     if win < cfg.pattern_swing_window * 4:
         return None
     window = candles[-win:]
-
     highs = swing_highs(window, cfg.pattern_swing_window)
     lows = swing_lows(window, cfg.pattern_swing_window)
+
+    hs = _detect_head_and_shoulders(symbol, window, highs, lows, cfg)
+    if hs is not None:
+        return hs
+    return _detect_channel_pattern(symbol, window, highs, lows, cfg)
+
+
+def _detect_channel_pattern(
+    symbol: str,
+    window: list[Candle],
+    highs: list[tuple[int, float]],
+    lows: list[tuple[int, float]],
+    cfg: Config,
+) -> PatternMatch | None:
     if len(highs) < cfg.pattern_min_swings or len(lows) < cfg.pattern_min_swings:
         return None
 
@@ -103,7 +130,7 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
     if res_r2 < cfg.pattern_min_r2 or sup_r2 < cfg.pattern_min_r2:
         return None
 
-    last_idx = win - 1
+    last_idx = len(window) - 1
     resistance_now = res_intercept + res_slope * last_idx
     support_now = sup_intercept + sup_slope * last_idx
     if resistance_now <= support_now:
@@ -117,7 +144,7 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
     if pattern is None:
         return None
 
-    last = candles[-1]
+    last = window[-1]
     eps = cfg.pattern_breakout_pct / 100.0
     if last.close > resistance_now * (1.0 + eps):
         status = "breakout_up"
@@ -149,6 +176,135 @@ def detect_pattern(symbol: str, candles: list[Candle], cfg: Config) -> PatternMa
         support=PatternLine(
             round(sup_slope_pct, 4), round(sup_r2, 3), support_now, sup_intercept
         ),
+        target=target,
+        note=note,
+    )
+
+
+# --------------------------------------------------------------------------- #
+# head-and-shoulders: three alternating swing extremes (shoulder/head/
+# shoulder) with a neckline fit through the two swings between them.
+# --------------------------------------------------------------------------- #
+def _neckline_point(
+    points: list[tuple[int, float]], lo: int, hi: int, *, pick_max: bool
+) -> tuple[int, float] | None:
+    """The most prominent point strictly between index ``lo`` and ``hi``."""
+    candidates = [p for p in points if lo < p[0] < hi]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p[1]) if pick_max else min(candidates, key=lambda p: p[1])
+
+
+def _detect_head_and_shoulders(
+    symbol: str,
+    window: list[Candle],
+    highs: list[tuple[int, float]],
+    lows: list[tuple[int, float]],
+    cfg: Config,
+) -> PatternMatch | None:
+    last_idx = len(window) - 1
+    last_close = window[-1].close
+    inverse = _try_inverse_hs(symbol, window, highs, lows, cfg, last_idx, last_close)
+    if inverse is not None:
+        return inverse
+    return _try_classic_hs(symbol, window, highs, lows, cfg, last_idx, last_close)
+
+
+def _try_inverse_hs(
+    symbol: str,
+    window: list[Candle],
+    highs: list[tuple[int, float]],
+    lows: list[tuple[int, float]],
+    cfg: Config,
+    last_idx: int,
+    last_close: float,
+) -> PatternMatch | None:
+    """Bullish reversal: shoulder-head-shoulder troughs, neckline through the
+    two peaks between them, confirms on a close above the (extended) neckline."""
+    if len(lows) < 3:
+        return None
+    (i0, l0), (i1, l1), (i2, l2) = lows[-3], lows[-2], lows[-1]
+    if not (l1 < l0 and l1 < l2):
+        return None
+    if l1 > min(l0, l2) * (1.0 - cfg.hs_min_head_prominence_pct / 100.0):
+        return None  # head isn't clearly deeper than both shoulders
+    if abs(l0 - l2) / min(l0, l2) * 100.0 > cfg.hs_shoulder_tolerance_pct:
+        return None  # shoulders too uneven to call symmetric
+
+    n0 = _neckline_point(highs, i0, i1, pick_max=True)
+    n1 = _neckline_point(highs, i1, i2, pick_max=True)
+    if n0 is None or n1 is None:
+        return None
+    slope, intercept, r2 = linear_regression([n0, n1])
+    neckline_now = intercept + slope * last_idx
+    if neckline_now <= l1:
+        return None  # neckline has to sit above the head to make sense
+
+    ref_price = window[0].close or 1.0
+    slope_pct = slope / ref_price * 100.0
+    eps = cfg.pattern_breakout_pct / 100.0
+    status = "breakout_up" if last_close > neckline_now * (1.0 + eps) else "emerging"
+    height = neckline_now - l1
+    target = neckline_now + height if status == "breakout_up" else None
+    note = f"shoulders {l0:.6g}/{l2:.6g}, head {l1:.6g}, neckline {slope_pct:+.2f}%/candle"
+
+    return PatternMatch(
+        symbol=symbol,
+        pattern="inverse_head_and_shoulders",
+        status=status,
+        price=last_close,
+        resistance=PatternLine(round(slope_pct, 4), round(r2, 3), neckline_now, intercept),
+        support=PatternLine(0.0, 1.0, l1, l1),
+        target=target,
+        note=note,
+    )
+
+
+def _try_classic_hs(
+    symbol: str,
+    window: list[Candle],
+    highs: list[tuple[int, float]],
+    lows: list[tuple[int, float]],
+    cfg: Config,
+    last_idx: int,
+    last_close: float,
+) -> PatternMatch | None:
+    """Bearish reversal: shoulder-head-shoulder peaks, neckline through the
+    two troughs between them, confirms on a close below the (extended) neckline."""
+    if len(highs) < 3:
+        return None
+    (i0, h0), (i1, h1), (i2, h2) = highs[-3], highs[-2], highs[-1]
+    if not (h1 > h0 and h1 > h2):
+        return None
+    if h1 < max(h0, h2) * (1.0 + cfg.hs_min_head_prominence_pct / 100.0):
+        return None  # head isn't clearly higher than both shoulders
+    if abs(h0 - h2) / min(h0, h2) * 100.0 > cfg.hs_shoulder_tolerance_pct:
+        return None  # shoulders too uneven to call symmetric
+
+    n0 = _neckline_point(lows, i0, i1, pick_max=False)
+    n1 = _neckline_point(lows, i1, i2, pick_max=False)
+    if n0 is None or n1 is None:
+        return None
+    slope, intercept, r2 = linear_regression([n0, n1])
+    neckline_now = intercept + slope * last_idx
+    if neckline_now >= h1:
+        return None  # neckline has to sit below the head to make sense
+
+    ref_price = window[0].close or 1.0
+    slope_pct = slope / ref_price * 100.0
+    eps = cfg.pattern_breakout_pct / 100.0
+    status = "breakout_down" if last_close < neckline_now * (1.0 - eps) else "emerging"
+    height = h1 - neckline_now
+    target = neckline_now - height if status == "breakout_down" else None
+    note = f"shoulders {h0:.6g}/{h2:.6g}, head {h1:.6g}, neckline {slope_pct:+.2f}%/candle"
+
+    return PatternMatch(
+        symbol=symbol,
+        pattern="head_and_shoulders",
+        status=status,
+        price=last_close,
+        resistance=PatternLine(0.0, 1.0, h1, h1),
+        support=PatternLine(round(slope_pct, 4), round(r2, 3), neckline_now, intercept),
         target=target,
         note=note,
     )

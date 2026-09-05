@@ -131,6 +131,65 @@ def test_rising_wedge_support_rises_faster_than_resistance():
     assert match.pattern == "rising_wedge"
 
 
+def test_inverse_head_and_shoulders_emerging():
+    cfg = _pattern_cfg(_base_cfg())
+    # shoulders ~80/82, head 70 (clearly deeper), neckline ~95->96, still below it
+    vertices = [(0, 100.0), (5, 80.0), (10, 95.0), (15, 70.0), (20, 96.0), (25, 82.0), (30, 90.0)]
+    candles = _zigzag_candles(vertices)
+    match = detect_pattern("AAA-USDT", candles, cfg)
+    assert match is not None
+    assert match.pattern == "inverse_head_and_shoulders"
+    assert match.status == "emerging"
+    assert match.target is None
+
+
+def test_inverse_head_and_shoulders_breakout_up_has_a_target():
+    cfg = _pattern_cfg(_base_cfg())
+    vertices = [(0, 100.0), (5, 80.0), (10, 95.0), (15, 70.0), (20, 96.0), (25, 82.0), (30, 100.0)]
+    candles = _zigzag_candles(vertices)
+    match = detect_pattern("AAA-USDT", candles, cfg)
+    assert match is not None
+    assert match.pattern == "inverse_head_and_shoulders"
+    assert match.status == "breakout_up"
+    assert match.target is not None
+    assert match.target > match.resistance.value_now  # neckline
+
+
+def test_head_and_shoulders_breakout_down_has_a_target():
+    cfg = _pattern_cfg(_base_cfg())
+    # shoulders ~80/78, head 90 (clearly higher), neckline ~65->64, closes well below it
+    vertices = [(0, 60.0), (5, 80.0), (10, 65.0), (15, 90.0), (20, 64.0), (25, 78.0), (30, 55.0)]
+    candles = _zigzag_candles(vertices)
+    match = detect_pattern("AAA-USDT", candles, cfg)
+    assert match is not None
+    assert match.pattern == "head_and_shoulders"
+    assert match.status == "breakout_down"
+    assert match.target is not None
+    assert match.target < match.support.value_now  # neckline
+
+
+def test_head_and_shoulders_rejects_asymmetric_shoulders():
+    cfg = _pattern_cfg(_base_cfg())
+    # right shoulder (110) is nowhere near the left shoulder's depth (80) - not symmetric
+    vertices = [
+        (0, 100.0), (5, 80.0), (10, 95.0), (15, 70.0), (20, 96.0), (25, 110.0), (30, 90.0),
+    ]
+    candles = _zigzag_candles(vertices)
+    match = detect_pattern("AAA-USDT", candles, cfg)
+    assert match is None or "head_and_shoulders" not in match.pattern
+
+
+def test_head_and_shoulders_rejects_a_shallow_head():
+    cfg = _pattern_cfg(_base_cfg())
+    # head (79) barely clears the shoulders (80) - not a real head-and-shoulders
+    vertices = [
+        (0, 100.0), (5, 80.0), (10, 95.0), (15, 79.0), (20, 96.0), (25, 82.0), (30, 90.0),
+    ]
+    candles = _zigzag_candles(vertices)
+    match = detect_pattern("AAA-USDT", candles, cfg)
+    assert match is None or "head_and_shoulders" not in match.pattern
+
+
 def _base_cfg():
     from local_high.config import Config
 

@@ -128,12 +128,21 @@ local-high-scanner --config config.yaml --patterns --pattern falling_wedge
 ```
 
 Patterns detected: `ascending_triangle`, `descending_triangle`, `rising_wedge`,
-`falling_wedge`, `ascending_channel`, `descending_channel`. Head-and-shoulders
-and double top/bottom need a different detector (peak/trough counting, not a
-two-line fit) and are intentionally out of scope for now. Tune the fit under
-`# --- Chart-pattern detection ---` in [`config.yaml`](config.yaml) —
-`pattern_min_r2` rejects noisy/non-genuine lines, `pattern_flat_slope_pct` and
-`pattern_parallel_tol_pct` control triangle-vs-wedge-vs-channel classification.
+`falling_wedge`, `ascending_channel`, `descending_channel` (all from a
+two-line fit), plus `inverse_head_and_shoulders` (bullish) and
+`head_and_shoulders` (bearish) from a three-swing shoulder/head/shoulder
+check with a neckline fit through the two swings between them — the same
+"resistance"/"support"/target shape as the two-line patterns (neckline vs. a
+flat line at the head), so confidence scoring, alerting and the dashboard's
+chart drawer need no pattern-specific code. Double top/bottom would need a
+third detector (two comparable extremes, no head) and isn't implemented.
+
+Tune the two-line fit under `# --- Chart-pattern detection ---` in
+[`config.yaml`](config.yaml) — `pattern_min_r2` rejects noisy/non-genuine
+lines, `pattern_flat_slope_pct` and `pattern_parallel_tol_pct` control
+triangle-vs-wedge-vs-channel classification. Tune head-and-shoulders with
+`hs_shoulder_tolerance_pct` (how close the two shoulders must be) and
+`hs_min_head_prominence_pct` (how clearly the head must clear them).
 
 ### Pattern breakout alerts
 
@@ -375,5 +384,5 @@ src/local_high/
 - Preset screeners and chart patterns are rule-based heuristics, not backtested
   strategies — unlike the New Local High state machine, there's no historical
   win-rate behind them yet. Treat matches as ideas to investigate, not signals.
-- Pattern detection only covers triangles, wedges and channels (a two-line
-  fit); head-and-shoulders and double top/bottom aren't implemented.
+- Pattern detection covers triangles, wedges, channels and head-and-shoulders;
+  double top/bottom isn't implemented.
