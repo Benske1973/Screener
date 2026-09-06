@@ -277,25 +277,42 @@ local-high-scanner --config config.yaml
 If either variable is missing, alerts still print to the console and the run
 continues. Revoke any bot token that has been pasted into a chat or a file.
 
-### Keep it running
+### Keep it running / restart after a reboot
 
-The plain command already loops forever (`cycle_seconds` between scans). To keep
-it alive on Windows:
+Everything runs as three background processes: the **scanner** (Telegram
+alerts), the **web dashboard**, and the **Cloudflare tunnel** that exposes it.
+A reboot stops all three.
 
-- **Simplest:** leave the PowerShell window open. It reconnects and backs off on
-  KuCoin errors on its own.
-- **Survives logout / reboot:** Task Scheduler → *Create Task* → trigger *At log on*
-  (or *At startup*), action `Start a program`:
-  - Program: `C:\Users\benny\high\.venv\Scripts\python.exe`
-  - Arguments: `-m local_high --config config.yaml`
-  - Start in: `C:\Users\benny\high`
-  - Set the two `LOCAL_HIGH_TELEGRAM_*` values as **user** environment variables
-    (System → Environment Variables) so the scheduled task inherits them.
-  - Tick *Run whether user is logged on or not* and *If the task fails, restart
-    every 1 minute*.
+**Start (or restart) all three at once:**
+
+```powershell
+powershell -File C:\Users\benny\high\scripts\start.ps1
+```
+
+It kills any running instances, starts the three hidden in the background,
+and prints the dashboard URL — the Cloudflare quick tunnel gets a **new
+random `*.trycloudflare.com` URL every restart**, and the script reads it
+back out of `logs\tunnel.log` for you. `scripts\stop.ps1` stops everything.
+
+The scripts read three **user** environment variables (set them once —
+`System → Environment Variables`, or `[Environment]::SetEnvironmentVariable(...)`
+— and they survive reboots): `LOCAL_HIGH_TELEGRAM_BOT_TOKEN`,
+`LOCAL_HIGH_TELEGRAM_CHAT_ID`, `LOCAL_HIGH_WEB_TOKEN`.
+
+**Auto-start on login** (so you never think about it): Task Scheduler →
+*Create Basic Task* → trigger *At log on* → action `Start a program`:
+- Program: `powershell.exe`
+- Arguments: `-WindowStyle Hidden -File C:\Users\benny\high\scripts\start.ps1`
+- On the *Settings* tab, tick *If the task fails, restart every 1 minute*.
+
+**Just the scanner, no dashboard/tunnel:**
+
+```powershell
+local-high-scanner --config config.yaml
+```
 
 State lives in `data/state.json`, so a restart never re-fires alerts you already
-got (subject to `alert_cooldown_seconds`).
+got (subject to `alert_cooldown_seconds` and the heartbeat's own timestamp).
 
 ## Configuration
 

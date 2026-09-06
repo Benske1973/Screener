@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 from local_high.config import Config
 from local_high.webapp import WebState, build_app
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_web_token(monkeypatch):
+    """The dev machine has LOCAL_HIGH_WEB_TOKEN set as a persisted user env var;
+    clear it by default so tests see a clean environment. The auth tests below
+    set it back explicitly via their own monkeypatch."""
+    monkeypatch.delenv("LOCAL_HIGH_WEB_TOKEN", raising=False)
 
 
 def _cfg() -> Config:
