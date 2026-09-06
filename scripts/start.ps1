@@ -86,4 +86,21 @@ else {
 Write-Host "Local:   http://localhost:8787/?token=$token"
 Write-Host ''
 Write-Host 'Open the link once with ?token=... - it sets a cookie after that.'
-Write-Host 'Logs in  logs\   |   Stop everything with  scripts\stop.ps1'
+Write-Host 'Stop everything with  scripts\stop.ps1'
+Write-Host ''
+Write-Host 'Closing this window is safe - the scanner, dashboard and tunnel keep' -ForegroundColor DarkGray
+Write-Host 'running in the background. This window just tails the scanner log:' -ForegroundColor DarkGray
+Write-Host '------------------------------------------------------------------------'
+
+$scannerLog = Join-Path $logs 'scanner.stdout.log'
+foreach ($i in 1..10) {
+    if (Test-Path $scannerLog) { break }
+    Start-Sleep -Seconds 1
+}
+if (Test-Path $scannerLog) {
+    Get-Content -Path $scannerLog -Wait -Tail 30
+}
+else {
+    Write-Host '(no scanner output yet - check logs\scanner.stderr.log)' -ForegroundColor Yellow
+    Read-Host 'Press Enter to close'
+}
